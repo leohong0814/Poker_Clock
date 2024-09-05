@@ -5,7 +5,6 @@
 #define ExtendPin 1
 #define PausePin 2
 #define BuzzerPin 3
-#define EnterSetupThreshold 5
 
 const int segmentPins[] = {4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17};
 const int digitPins[] = {18, 19};
