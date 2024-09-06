@@ -1,13 +1,12 @@
 #include <Arduino.h>
 #include <Arduino_FreeRTOS.h>
 
-#define StartPin 0
-#define ExtendPin 1
-#define PausePin 2
-#define BuzzerPin 3
+#define StartPin 2
+#define ExtendPin 3
+#define PausePin 4
+#define BuzzerPin 5
 
-const int segmentPins[] = {4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17};
-const int digitPins[] = {18, 19};
+const int segmentPins[] = {6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19};
 const int deciamlNum = 2;
 const int CountDownInterval = 30;
 const int ExtenInterval = 90;
@@ -69,16 +68,9 @@ void handlePausePin()
 
 void lightDigit(int digit, int value)
 {
-  for (int i = 0; i < deciamlNum; i++)
-  {
-    digitalWrite(digitPins[i], HIGH);
-  }
-
-  digitalWrite(digitPins[digit], LOW);
-
   for (int i = 0; i < 8; i++)
   {
-    digitalWrite(segmentPins[i], (digitToSegments[value] >> i) & 0x01);
+    digitalWrite(segmentPins[i + digit], (digitToSegments[value] >> i) & 0x01);
   }
 }
 
@@ -90,7 +82,6 @@ void displayNumber(int num)
     num /= 10;
 
     lightDigit(digit, digitValue);
-    delay(5);
   }
 }
 
@@ -100,14 +91,10 @@ void setup()
   pinMode(ExtendPin, INPUT);
   pinMode(PausePin, INPUT);
   pinMode(BuzzerPin, OUTPUT);
-  for (int i = 0; i < 16; i++)
+  digitalWrite(BuzzerPin, LOW);
+  for (int i = 0; i < 15; i++)
   {
     pinMode(segmentPins[i], OUTPUT);
-  }
-  for (int i = 0; i < deciamlNum; i++)
-  {
-    pinMode(digitPins[i], OUTPUT);
-    digitalWrite(digitPins[i], HIGH);
   }
   attachInterrupt(digitalPinToInterrupt(StartPin), handleStartPin, FALLING);
   attachInterrupt(digitalPinToInterrupt(ExtendPin), handleExtendPin, FALLING);
@@ -119,32 +106,32 @@ void setup()
 
 void loop()
 {
-  
 }
 
-void CountDownTask(void *pvParameters) {
-  (void) pvParameters;
+void CountDownTask(void *pvParameters)
+{
+  (void)pvParameters;
 
   while (true)
   {
     switch (Status)
     {
-      case Pause:
+    case Pause:
       CurrTime = 0;
       Buzzer = None;
-        continue;
-        break;
-      case Running:
-        CurrInterval = CountDownInterval;
-        break;
-      case Extend:
-        CurrInterval = ExtenInterval;
-        break;
-      default:
-        break;
+      continue;
+      break;
+    case Running:
+      CurrInterval = CountDownInterval;
+      break;
+    case Extend:
+      CurrInterval = ExtenInterval;
+      break;
+    default:
+      break;
     }
     displayNumber(CurrInterval - CurrTime);
-    vTaskDelay(1000 / portTICK_PERIOD_MS); 
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
     CurrTime = CurrTime + 1;
     if (CurrInterval - CurrTime == 5)
     {
@@ -159,15 +146,16 @@ void CountDownTask(void *pvParameters) {
   }
 }
 
-void BuzzerTask(void *pvParameters) {
-  (void) pvParameters;
+void BuzzerTask(void *pvParameters)
+{
+  (void)pvParameters;
 
   while (true)
   {
     switch (Buzzer)
     {
     case None:
-    default:   
+    default:
       break;
     case Hint:
       digitalWrite(BuzzerPin, HIGH);
@@ -181,9 +169,9 @@ void BuzzerTask(void *pvParameters) {
       break;
     case Alert:
       digitalWrite(BuzzerPin, HIGH);
-      vTaskDelay(2500 / portTICK_PERIOD_MS); 
+      vTaskDelay(2500 / portTICK_PERIOD_MS);
       Buzzer = None;
       break;
-    } 
+    }
   }
 }
