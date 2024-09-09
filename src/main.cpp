@@ -6,15 +6,17 @@
 #define BuzzerPin 18
 
 const int segmentPins[2][7] = {{4,5,6,7,8,9, 10},{ 11,12,13,14,15,16,17}};
-const int CountDownInterval = 25;
+const int CountDownInterval = 15;
 const int ExtenInterval = 65;
 const int decimalNum = 2;
 int CurrInterval = CountDownInterval;
 int CurrTime = 0;
 
 TaskHandle_t CountDownTaskHandle;
+TaskHandle_t BuzzerTaskHandle;
 
 void CountDownTask(void *pvParameters);
+void BuzzerTask(void *pvParameters);
 
 enum Situation
 {
@@ -22,8 +24,16 @@ enum Situation
   Running,
   Extend,
 };
+enum BuzerType
+{
+  None,
+  Hint,
+  Alert,
+};
 
 static enum Situation Status = Running;
+static enum BuzerType Buzzer = None;
+
 
 const byte digitToSegments[] = {
     0b00111111, // 0
@@ -78,8 +88,7 @@ void displayNumber(int num)
     int vlaue = num % 10;
     num/=10;
     lightDigit(digit, vlaue);   
-  }
-      
+  }    
 }
 
 void setup()
@@ -99,7 +108,8 @@ void setup()
   
   attachInterrupt(digitalPinToInterrupt(StartPin), handleStartPin, FALLING);
   attachInterrupt(digitalPinToInterrupt(ExtendPin), handleExtendPin, FALLING);
-  xTaskCreate(CountDownTask, "CountDownrTask", 128, NULL, 1, &CountDownTaskHandle);
+  xTaskCreate(CountDownTask, "CountDownTask", 512, NULL, 1, &CountDownTaskHandle);
+  xTaskCreate(BuzzerTask, "BuzzerTask", 512, NULL, 1, &BuzzerTaskHandle);
   vTaskStartScheduler();
 }
 
@@ -118,6 +128,7 @@ void CountDownTask(void *pvParameters)
     case Pause:
       CurrTime = 0;
       CurrInterval = CountDownInterval;
+      vTaskDelay(10 / portTICK_PERIOD_MS);
       continue;
       break;
     case Running:
@@ -132,10 +143,46 @@ void CountDownTask(void *pvParameters)
     displayNumber(CurrInterval - CurrTime);
     vTaskDelay(1000 / portTICK_PERIOD_MS);
     CurrTime = CurrTime + 1;
+    if (CurrInterval - CurrTime == 5)
+    {
+      Buzzer = Hint;
+    }
     if (CurrInterval < CurrTime)
     {
       CurrTime = 0;
+      Buzzer = Alert;
       Status = Pause;
+    }
+  }
+}
+
+void BuzzerTask(void *pvParameters)
+{
+  (void)pvParameters;
+
+  while (true)
+  {
+    switch (Buzzer)
+    {
+      case None:
+        vTaskDelay(10 / portTICK_PERIOD_MS);
+        break;
+      case Hint:
+        digitalWrite(BuzzerPin, HIGH);
+        vTaskDelay(100 / portTICK_PERIOD_MS);
+        digitalWrite(BuzzerPin, LOW);
+        vTaskDelay(100 / portTICK_PERIOD_MS);
+        digitalWrite(BuzzerPin, HIGH);
+        vTaskDelay(100 / portTICK_PERIOD_MS);
+        digitalWrite(BuzzerPin, LOW);
+        Buzzer = None;
+        break;
+      case Alert:
+        digitalWrite(BuzzerPin, HIGH);
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
+        digitalWrite(BuzzerPin, LOW);
+        Buzzer = None;
+        break;      
     }
   }
 }
