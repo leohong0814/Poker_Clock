@@ -2,11 +2,13 @@
 #include <Arduino_FreeRTOS.h>
 
 #define StartPin 2
-#define BuzzerPin 4
+#define ExtendPin 3
+#define BuzzerPin 18
 
-const int segmentPins[7] = { 7,8,9,10,11,12,13};
-const int CountDownInterval = 15;
-const int ExtenInterval = 90;
+const int segmentPins[2][7] = {{4,5,6,7,8,9, 10},{ 11,12,13,14,15,16,17}};
+const int CountDownInterval = 25;
+const int ExtenInterval = 65;
+const int decimalNum = 2;
 int CurrInterval = CountDownInterval;
 int CurrTime = 0;
 
@@ -39,36 +41,64 @@ const byte digitToSegments[] = {
 void handleStartPin()
 {
   CurrTime = 0;
-  Status = Status==Running?Pause:Running;
+  if(Status==Running || Status == Extend)
+  {
+    Status = Pause;
+  }
+  else
+  {
+    Status = Running;
+  }  
 }
 
-void lightDigit(int value)
+void handleExtendPin()
+{
+  if(Status == Running)
+  {
+    Status = Extend;
+  }
+  else if (Status == Extend)
+  {
+    Status = Pause;
+  }
+}
+
+void lightDigit(int digit,int value)
 {
   for (int i = 0; i < 7; i++)
   {
-    digitalWrite(segmentPins[i], (digitToSegments[value] >> i) & 0x01? HIGH : LOW);
+    digitalWrite(segmentPins[digit][i], (digitToSegments[value] >> i) & 0x01? HIGH : LOW);
   }
 }
 
 void displayNumber(int num)
 {
-    int digitValue = num % 10;
-    lightDigit(digitValue);  
+  for(int digit =0; digit<decimalNum;digit++)
+  {
+    int vlaue = num % 10;
+    num/=10;
+    lightDigit(digit, vlaue);   
+  }
+      
 }
 
 void setup()
 {
   pinMode(StartPin, INPUT);
+  pinMode(ExtendPin, INPUT);
   pinMode(BuzzerPin, OUTPUT);
-  digitalWrite(BuzzerPin, LOW);
 
-    for(int i =0;i <7;i++)
-    {
-      pinMode(segmentPins[i], OUTPUT);
-      digitalWrite(segmentPins[i], LOW);
-    }
+  for(int digit = 0;digit<decimalNum;digit++)
+  {
+      for(int i =0;i <7;i++)
+      {
+        pinMode(segmentPins[digit][i], OUTPUT);
+        digitalWrite(segmentPins[digit][i], LOW);
+      }
+  }
   
   attachInterrupt(digitalPinToInterrupt(StartPin), handleStartPin, FALLING);
+  attachInterrupt(digitalPinToInterrupt(ExtendPin), handleExtendPin, FALLING);
   xTaskCreate(CountDownTask, "CountDownrTask", 128, NULL, 1, &CountDownTaskHandle);
   vTaskStartScheduler();
 }
@@ -87,6 +117,7 @@ void CountDownTask(void *pvParameters)
     {
     case Pause:
       CurrTime = 0;
+      CurrInterval = CountDownInterval;
       continue;
       break;
     case Running:
