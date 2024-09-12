@@ -5,7 +5,8 @@
 #define ExtendPin 3
 #define BuzzerPin 18
 
-const int segmentPins[2][7] = {{4,5,6,7,8,9, 10},{ 11,12,13,14,15,16,17}};
+const int segmentPins[7] = {4,5,6,7,8,9, 10};
+const int digitPins[] = {11,12}; // Pin 11=> tens, Pin 12=> Ones
 const int CountDownInterval = 15;
 const int ExtenInterval = 65;
 const int decimalNum = 2;
@@ -75,20 +76,30 @@ void handleExtendPin()
 
 void lightDigit(int digit,int value)
 {
+  digitalWrite(digitPins[digit], LOW);
   for (int i = 0; i < 7; i++)
   {
-    digitalWrite(segmentPins[digit][i], (digitToSegments[value] >> i) & 0x01? HIGH : LOW);
+    digitalWrite(segmentPins[i], (digitToSegments[value] >> i) & 0x01? HIGH : LOW);
   }
 }
 
 void displayNumber(int num)
 {
-  for(int digit =0; digit<decimalNum;digit++)
+  int tens = num/10;
+  int ones = num %10;
+  int countMsecond = 1000;
+  while (countMsecond >0)
   {
-    int vlaue = num % 10;
-    num/=10;
-    lightDigit(digit, vlaue);   
-  }    
+    digitalWrite(digitPins[0], HIGH);
+    digitalWrite(digitPins[1], HIGH);
+    lightDigit(0, tens);
+    vTaskDelay(10 / portTICK_PERIOD_MS);
+    digitalWrite(digitPins[0], HIGH);
+    lightDigit(1, ones);
+    vTaskDelay(10 / portTICK_PERIOD_MS);
+    digitalWrite(digitPins[1], HIGH);
+    countMsecond-=20;
+  }
 }
 
 void setup()
@@ -97,13 +108,15 @@ void setup()
   pinMode(ExtendPin, INPUT);
   pinMode(BuzzerPin, OUTPUT);
 
-  for(int digit = 0;digit<decimalNum;digit++)
+  for(int i =0;i <7;i++)
   {
-      for(int i =0;i <7;i++)
-      {
-        pinMode(segmentPins[digit][i], OUTPUT);
-        digitalWrite(segmentPins[digit][i], LOW);
-      }
+    pinMode(segmentPins[i], OUTPUT);
+    digitalWrite(segmentPins[i], LOW);
+  }
+  for(int i = 0;i<decimalNum;i++)
+  {
+    pinMode(digitPins[i], OUTPUT);
+    digitalWrite(digitPins[i], HIGH);
   }
   
   attachInterrupt(digitalPinToInterrupt(StartPin), handleStartPin, FALLING);
@@ -141,7 +154,6 @@ void CountDownTask(void *pvParameters)
       break;
     }
     displayNumber(CurrInterval - CurrTime);
-    vTaskDelay(1000 / portTICK_PERIOD_MS);
     CurrTime = CurrTime + 1;
     if (CurrInterval - CurrTime == 5)
     {
