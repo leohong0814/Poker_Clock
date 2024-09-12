@@ -3,198 +3,172 @@
 
 #define StartPin 2
 #define ExtendPin 3
-#define BuzzerPin 18
+#define BuzzerPin 13
 
-const int segmentPins[7] = {4,5,6,7,8,9, 10};
-const int digitPins[] = {11,12}; // Pin 11=> tens, Pin 12=> Ones
-const int CountDownInterval = 15;
-const int ExtenInterval = 65;
-const int decimalNum = 2;
-int CurrInterval = CountDownInterval;
-int CurrTime = 0;
+const int segmentPins[7] = { 4, 5, 6, 7, 8, 9, 10}; // Pins for 7-segment display segments
+const int digitPins[] = {11, 12}; // Pins for selecting each digit
+const int countdownSeconds = 20;
+const int ExtendSeconds = 40;
 
-TaskHandle_t CountDownTaskHandle;
+int currentNumber = countdownSeconds;
+
+TaskHandle_t DisplayTaskHandle;
+TaskHandle_t CountdownTaskHandle;
 TaskHandle_t BuzzerTaskHandle;
 
-void CountDownTask(void *pvParameters);
+void DisplayTask(void *pvParameters);
+void CountdownTask(void *pvParameters);
 void BuzzerTask(void *pvParameters);
 
-enum Situation
-{
+enum CountDownSituation {
   Pause,
-  Running,
-  Extend,
+  Running
 };
-enum BuzerType
-{
+enum BuzzerSituation {
   None,
   Hint,
   Alert,
 };
+static enum CountDownSituation Status = Pause;
+static enum BuzzerSituation Buzzer = None;
 
-static enum Situation Status = Running;
-static enum BuzerType Buzzer = None;
-
-
+// Segment encoding for digits 0-9 (common cathode)
 const byte digitToSegments[] = {
-    0b00111111, // 0
-    0b00000110, // 1
-    0b01011011, // 2
-    0b01001111, // 3
-    0b01100110, // 4
-    0b01101101, // 5
-    0b01111101, // 6
-    0b00000111, // 7
-    0b01111111, // 8
-    0b01101111  // 9
+  0b00111111, // 0
+  0b00000110, // 1
+  0b01011011, // 2
+  0b01001111, // 3
+  0b01100110, // 4
+  0b01101101, // 5
+  0b01111101, // 6
+  0b00000111, // 7
+  0b01111111, // 8
+  0b01101111  // 9
 };
 
-void handleStartPin()
-{
-  CurrTime = 0;
-  if(Status==Running || Status == Extend)
-  {
-    Status = Pause;
-  }
-  else
-  {
-    Status = Running;
-  }  
-}
-
-void handleExtendPin()
-{
-  if(Status == Running)
-  {
-    Status = Extend;
-  }
-  else if (Status == Extend)
-  {
+void handleStartPin() {
+  if (Status == Pause) {
+    currentNumber = countdownSeconds;
+    Status = Running;  
+  } else {
     Status = Pause;
   }
 }
 
-void lightDigit(int digit,int value)
-{
-  digitalWrite(digitPins[digit], LOW);
-  for (int i = 0; i < 7; i++)
-  {
-    digitalWrite(segmentPins[i], (digitToSegments[value] >> i) & 0x01? HIGH : LOW);
-  }
+void handleExtendPin() {
+ if(Status == Running)
+ {
+    currentNumber+=ExtendSeconds;
+ }
 }
 
-void displayNumber(int num)
-{
-  int tens = num/10;
-  int ones = num %10;
-  int countMsecond = 1000;
-  while (countMsecond >0)
-  {
-    digitalWrite(digitPins[0], HIGH);
-    digitalWrite(digitPins[1], HIGH);
-    lightDigit(0, tens);
-    vTaskDelay(10 / portTICK_PERIOD_MS);
-    digitalWrite(digitPins[0], HIGH);
-    lightDigit(1, ones);
-    vTaskDelay(10 / portTICK_PERIOD_MS);
-    digitalWrite(digitPins[1], HIGH);
-    countMsecond-=20;
-  }
-}
-
-void setup()
-{
-  pinMode(StartPin, INPUT);
-  pinMode(ExtendPin, INPUT);
-  pinMode(BuzzerPin, OUTPUT);
-
-  for(int i =0;i <7;i++)
-  {
+void setup() {
+  // Setup pins for 7-segment display
+  for (int i = 0; i < 7; i++) {
     pinMode(segmentPins[i], OUTPUT);
     digitalWrite(segmentPins[i], LOW);
   }
-  for(int i = 0;i<decimalNum;i++)
-  {
+  for (int i = 0; i < 2; i++) {
     pinMode(digitPins[i], OUTPUT);
-    digitalWrite(digitPins[i], HIGH);
+    digitalWrite(digitPins[i], HIGH);  // Turn off both digits initially
   }
   
+  // Setup pins for Start button and Buzzer
+  pinMode(StartPin, INPUT_PULLUP);
+  pinMode(ExtendPin, INPUT_PULLUP);
+  pinMode(BuzzerPin, OUTPUT);
   attachInterrupt(digitalPinToInterrupt(StartPin), handleStartPin, FALLING);
   attachInterrupt(digitalPinToInterrupt(ExtendPin), handleExtendPin, FALLING);
-  xTaskCreate(CountDownTask, "CountDownTask", 512, NULL, 1, &CountDownTaskHandle);
-  xTaskCreate(BuzzerTask, "BuzzerTask", 512, NULL, 1, &BuzzerTaskHandle);
-  vTaskStartScheduler();
+
+  // Create FreeRTOS tasks
+  xTaskCreate(DisplayTask, "DisplayTask", 256, NULL, 1, &DisplayTaskHandle);
+  xTaskCreate(CountdownTask, "CountdownTask", 256, NULL, 1, &CountdownTaskHandle);
+  xTaskCreate(BuzzerTask, "BuzzerTask", 128, NULL, 1, &BuzzerTaskHandle);
+  
+  vTaskStartScheduler();  // Start the FreeRTOS scheduler
 }
 
-void loop()
-{
+void lightDigit(int digit, int value) {
+  for (int i = 0; i < 7; i++) {
+    digitalWrite(segmentPins[i], (digitToSegments[value] >> i) & 0x01 ? HIGH : LOW);
+  }
+  digitalWrite(digitPins[digit], LOW);  // Enable the current digit
 }
 
-void CountDownTask(void *pvParameters)
-{
+void displayNumber(int num) {
+  int tens = num / 10;
+  int ones = num % 10;
+
+  // Display the tens digit
+  digitalWrite(digitPins[1], HIGH);  // Turn off ones
+  lightDigit(0, tens);
+  vTaskDelay(5 / portTICK_PERIOD_MS);
+  digitalWrite(digitPins[0], HIGH);  // Turn off tens
+  
+  // Display the ones digit
+  lightDigit(1, ones);
+  vTaskDelay(5 / portTICK_PERIOD_MS);
+  digitalWrite(digitPins[1], HIGH);  // Turn off ones
+}
+
+void DisplayTask(void *pvParameters) {
   (void)pvParameters;
 
-  while (true)
-  {
-    switch (Status)
-    {
-    case Pause:
-      CurrTime = 0;
-      CurrInterval = CountDownInterval;
-      vTaskDelay(10 / portTICK_PERIOD_MS);
-      continue;
-      break;
-    case Running:
-      CurrInterval = CountDownInterval;
-      break;
-    case Extend:
-      CurrInterval = ExtenInterval;
-      break;
-    default:
-      break;
-    }
-    displayNumber(CurrInterval - CurrTime);
-    CurrTime = CurrTime + 1;
-    if (CurrInterval - CurrTime == 5)
-    {
-      Buzzer = Hint;
-    }
-    if (CurrInterval < CurrTime)
-    {
-      CurrTime = 0;
-      Buzzer = Alert;
-      Status = Pause;
+  while (true) {
+    displayNumber(currentNumber);
+    vTaskDelay(10 / portTICK_PERIOD_MS);  // Refresh display every 10ms
+  }
+}
+
+void CountdownTask(void *pvParameters) {
+  (void)pvParameters;
+
+  while (true) {
+    if (Status == Running && currentNumber > 0) {
+      vTaskDelay(1000 / portTICK_PERIOD_MS);  // Delay for 1 second
+      currentNumber--;  // Decrease the number every second
+      if (currentNumber == 0) {
+        Status = Pause;  // Stop countdown when reaching zero
+        Buzzer = Alert;
+      }
+      else if (currentNumber == 5)
+      {
+        Buzzer = Hint;
+      }
+    } else {
+      vTaskDelay(10 / portTICK_PERIOD_MS);  // Pause mode, minimal delay
     }
   }
 }
 
-void BuzzerTask(void *pvParameters)
-{
+void BuzzerTask(void *pvParameters) {
   (void)pvParameters;
 
-  while (true)
-  {
-    switch (Buzzer)
+  while (true) {
+    if (Buzzer == Hint) {
+      digitalWrite(BuzzerPin, HIGH);  // Buzzer on when countdown finishes
+      vTaskDelay(100 / portTICK_PERIOD_MS);
+      digitalWrite(BuzzerPin, LOW);
+      vTaskDelay(100 / portTICK_PERIOD_MS);
+      digitalWrite(BuzzerPin, HIGH);  // Buzzer on when countdown finishes
+      vTaskDelay(100 / portTICK_PERIOD_MS);
+      digitalWrite(BuzzerPin, LOW);
+      vTaskDelay(100 / portTICK_PERIOD_MS);
+      Buzzer = None;
+    }
+    else if (Buzzer == Alert)
     {
-      case None:
-        vTaskDelay(10 / portTICK_PERIOD_MS);
-        break;
-      case Hint:
-        digitalWrite(BuzzerPin, HIGH);
-        vTaskDelay(100 / portTICK_PERIOD_MS);
-        digitalWrite(BuzzerPin, LOW);
-        vTaskDelay(100 / portTICK_PERIOD_MS);
-        digitalWrite(BuzzerPin, HIGH);
-        vTaskDelay(100 / portTICK_PERIOD_MS);
-        digitalWrite(BuzzerPin, LOW);
-        Buzzer = None;
-        break;
-      case Alert:
-        digitalWrite(BuzzerPin, HIGH);
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
-        digitalWrite(BuzzerPin, LOW);
-        Buzzer = None;
-        break;      
+      digitalWrite(BuzzerPin, HIGH);  // Buzzer on when countdown finishes
+      vTaskDelay(1000 / portTICK_PERIOD_MS);
+      digitalWrite(BuzzerPin, LOW);
+      Buzzer = None;
+    }  
+     else {
+      vTaskDelay(100 / portTICK_PERIOD_MS);  // Check buzzer every 100ms
     }
   }
+}
+
+void loop() {
+  // Nothing to do in loop
 }
