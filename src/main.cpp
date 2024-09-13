@@ -5,8 +5,8 @@
 #define ExtendPin 3
 #define BuzzerPin 13
 
-const int segmentPins[7] = { 4, 5, 6, 7, 8, 9, 10}; // Pins for 7-segment display segments
-const int digitPins[] = {11, 12}; // Pins for selecting each digit
+const int segmentPins[7] = { 11,6,10,8,9,5,7}; // Pins for 7-segment display segments
+const int digitPins[] = {12, 4}; // Pins for selecting each digit
 const int countdownSeconds = 20;
 const int ExtendSeconds = 40;
 
