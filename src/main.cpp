@@ -47,19 +47,29 @@ const byte digitToSegments[] = {
 };
 
 void handleStartPin() {
-  if (Status == Pause) {
-    currentNumber = countdownSeconds;
-    Status = Running;  
-  } else {
-    Status = Pause;
+  static unsigned long lastPressTime = 0;
+  unsigned long currentTime = millis();
+  if(currentTime - lastPressTime > 50)
+  {
+    if (Status == Pause) {
+      currentNumber = countdownSeconds;
+      Status = Running;  
+    } else {
+      Status = Pause;
+    }
   }
 }
 
 void handleExtendPin() {
- if(Status == Running)
- {
-    currentNumber+=ExtendSeconds;
- }
+  static unsigned long lastPressTime = 0;
+  unsigned long currentTime = millis();
+  if(currentTime - lastPressTime > 50)
+  {
+    if(Status == Running)
+    {
+        currentNumber+=ExtendSeconds;
+    }
+  }
 }
 
 void setup() {
